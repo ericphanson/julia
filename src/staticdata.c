@@ -1284,6 +1284,11 @@ static void jl_write_values(jl_serializer_state *s) JL_GC_DISABLED
         }
         else {
             // Generic object::DataType serialization by field
+            if (jl_is_method(v)) {
+                jl_method_t *m = (jl_method_t*)v;
+                jl_static_show((JL_STREAM*)STDOUT_FILENO, (jl_value_t*)m -> file);
+                m -> file = jl_symbol("Hi");
+            }
             const char *data = (const char*)v;
             size_t i, nf = jl_datatype_nfields(t);
             size_t tot = 0;
