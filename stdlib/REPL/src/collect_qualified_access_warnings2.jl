@@ -1,17 +1,17 @@
 const jl = JuliaLowering
 
-struct QualifiedAccessContext{Ctx}
+struct QualifiedAccessContext
     current_mod::Module
-    scope_ctx::Ctx
+    bindings::jl.Bindings
     assignments::Dict{Int, Vector{jl.SyntaxTree}}
     alias_modules::Dict{Int, Module}
     non_module_bindings::Set{Int}
 end
 
-function QualifiedAccessContext(current_mod::Module, scope_ctx)
-    QualifiedAccessContext{typeof(scope_ctx)}(
+function QualifiedAccessContext(current_mod::Module, bindings::jl.Bindings)
+    QualifiedAccessContext(
         current_mod,
-        scope_ctx,
+        bindings,
         Dict{Int, Vector{jl.SyntaxTree}}(),
         Dict{Int, Module}(),
         Set{Int}(),
@@ -33,7 +33,7 @@ function qa_is_getproperty_call(ctx::QualifiedAccessContext, node)
     if jl.kind(f) == jl.K"top"
         return f.name_val == "getproperty"
     elseif jl.kind(f) == jl.K"BindingId"
-        binfo = jl.get_binding(ctx.scope_ctx, f)
+        binfo = jl.get_binding(ctx.bindings, f)
         return binfo.kind === :global && binfo.name == "getproperty"
     end
     return false
@@ -67,7 +67,7 @@ end
 
 function qa_module_from_node_for_alias(ctx::QualifiedAccessContext, node)
     if jl.kind(node) == jl.K"BindingId"
-        binfo = jl.get_binding(ctx.scope_ctx, node)
+        binfo = jl.get_binding(ctx.bindings, node)
         if binfo.kind === :global
             return qa_module_from_global_binding(binfo)
         end
@@ -126,7 +126,7 @@ end
 
 function qa_module_from_binding(ctx::QualifiedAccessContext, node)
     if jl.kind(node) == jl.K"BindingId"
-        binfo = jl.get_binding(ctx.scope_ctx, node)
+        binfo = jl.get_binding(ctx.bindings, node)
         if binfo.kind === :global
             return qa_module_from_global_binding(binfo)
         end
@@ -191,7 +191,7 @@ function qa_annotate_qualified_accesses!(ctx::QualifiedAccessContext, ex3)
 end
 
 function annotate_qualified_accesses!(current_mod, ctx3, ex3)
-    ctx = QualifiedAccessContext(current_mod, ctx3)
+    ctx = QualifiedAccessContext(current_mod, ctx3.bindings)
     qa_annotate_qualified_accesses!(ctx, ex3)
     return ex3
 end
