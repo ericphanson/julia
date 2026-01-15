@@ -1,8 +1,8 @@
 using JuliaLowering, Test, Logging, REPL
 
 include("src/collect_qualified_access_warnings2.jl")
-# _collect = collect_qualified_access_warnings2
-_collect = REPL.collect_qualified_access_warnings
+_collect = collect_qualified_access_warnings2
+# _collect = REPL.collect_qualified_access_warnings
 # Mimic of JSON.jl's structure
 module JSON54872
 

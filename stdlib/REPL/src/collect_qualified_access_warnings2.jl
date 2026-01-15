@@ -1,11 +1,6 @@
 const jl = JuliaLowering
-function collect_qualified_access_warnings2(current_mod, ast)
-    ast isa Expr || return Set()
-    st = jl.expr_to_syntaxtree(ast)
-    ctx1, ex1 = jl.expand_forms_1(current_mod, st, true, Base.get_world_counter())
-    ctx2, ex2 = jl.expand_forms_2(ctx1, ex1)
-    ctx3, ex3 = jl.resolve_scopes(ctx2, ex2)
-    warnings = Set()
+function qualified_accesses_scoped(current_mod, ctx3, ex3)
+    accesses = Vector{NamedTuple{(:outer_mod, :mod, :name), Tuple{Module, Module, Symbol}}}()
     assignments = Dict{Int, Vector{jl.SyntaxTree}}()
     alias_modules = Dict{Int, Module}()
     non_module_bindings = Set{Int}()
@@ -167,15 +162,7 @@ function collect_qualified_access_warnings2(current_mod, ast)
             outer_mod, mod = mods
             name = symbol_from_leaf(node[3])
             name === nothing && return
-            owner = try
-                which(mod, name)
-            catch
-                return
-            end
-            REPL.has_ancestor(owner, mod) && return
-            Base.ispublic(mod, name) && return
-            mod === Base && Base.ispublic(Core, name) && return
-            push!(warnings, (; outer_mod, mod, owner, name_being_accessed=name))
+            push!(accesses, (; outer_mod, mod, name))
             return
         end
         for child in jl.children(node)
@@ -186,6 +173,27 @@ function collect_qualified_access_warnings2(current_mod, ast)
 
     resolve_alias_modules!()
     collect!(ex3)
+    return accesses
+end
+
+function collect_qualified_access_warnings2(current_mod, ast)
+    ast isa Expr || return Set()
+    st = jl.expr_to_syntaxtree(ast)
+    ctx1, ex1 = jl.expand_forms_1(current_mod, st, true, Base.get_world_counter())
+    ctx2, ex2 = jl.expand_forms_2(ctx1, ex1)
+    ctx3, ex3 = jl.resolve_scopes(ctx2, ex2)
+    warnings = Set()
+    for (; outer_mod, mod, name) in qualified_accesses_scoped(current_mod, ctx3, ex3)
+        owner = try
+            which(mod, name)
+        catch
+            continue
+        end
+        REPL.has_ancestor(owner, mod) && continue
+        Base.ispublic(mod, name) && continue
+        mod === Base && Base.ispublic(Core, name) && continue
+        push!(warnings, (; outer_mod, mod, owner, name_being_accessed=name))
+    end
     return warnings
 end
 collect_qualified_access_warnings2(ast) = collect_qualified_access_warnings2(Base.active_module(), ast)
