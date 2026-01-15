@@ -1,6 +1,7 @@
 const jl = JuliaLowering
-function qualified_accesses_scoped(current_mod, ctx3, ex3)
-    accesses = Vector{NamedTuple{(:outer_mod, :mod, :name), Tuple{Module, Module, Symbol}}}()
+function annotate_qualified_accesses!(current_mod, ctx3, ex3)
+    graph = jl.syntax_graph(ex3)
+    jl.ensure_attributes!(graph; qualified_access=Union{Nothing, Tuple{Module, Module, Symbol}})
     assignments = Dict{Int, Vector{jl.SyntaxTree}}()
     alias_modules = Dict{Int, Module}()
     non_module_bindings = Set{Int}()
@@ -162,7 +163,7 @@ function qualified_accesses_scoped(current_mod, ctx3, ex3)
             outer_mod, mod = mods
             name = symbol_from_leaf(node[3])
             name === nothing && return
-            push!(accesses, (; outer_mod, mod, name))
+            jl.setattr!(node, :qualified_access, (outer_mod, mod, name))
             return
         end
         for child in jl.children(node)
@@ -172,6 +173,27 @@ function qualified_accesses_scoped(current_mod, ctx3, ex3)
     end
 
     resolve_alias_modules!()
+    collect!(ex3)
+    return ex3
+end
+
+function qualified_accesses_scoped(current_mod, ctx3, ex3)
+    annotate_qualified_accesses!(current_mod, ctx3, ex3)
+    accesses = Vector{NamedTuple{(:outer_mod, :mod, :name), Tuple{Module, Module, Symbol}}}()
+
+    function collect!(node)
+        node isa jl.SyntaxTree || return
+        access = get(node, :qualified_access, nothing)
+        if access !== nothing
+            outer_mod, mod, name = access
+            push!(accesses, (; outer_mod, mod, name))
+        end
+        for child in jl.children(node)
+            collect!(child)
+        end
+        return
+    end
+
     collect!(ex3)
     return accesses
 end
