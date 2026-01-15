@@ -189,6 +189,65 @@ end # JSON54872_public_nested
     end)
     @test isempty(warnings)
 
+    # Explicit local declaration should suppress warnings
+    warnings = _collect(@__MODULE__, quote
+        let
+            local JSON54872
+            JSON54872.tryparse
+        end
+    end)
+    @test isempty(warnings)
+
+    # Explicit global declaration should still warn
+    warnings = _collect(@__MODULE__, quote
+        let
+            global JSON54872
+            JSON54872.tryparse
+        end
+    end)
+    @test length(warnings) == 1
+    @test only(warnings).owner == Base
+    @test only(warnings).name_being_accessed == :tryparse
+
+    # Loop variables introduce locals
+    warnings = _collect(@__MODULE__, quote
+        for JSON54872 in 1:1
+            JSON54872.tryparse
+        end
+    end)
+    @test isempty(warnings)
+
+    # Local binding in a while loop should suppress warnings
+    warnings = _collect(@__MODULE__, quote
+        local JSON54872
+        while true
+            JSON54872 = 1
+            JSON54872.tryparse
+            break
+        end
+    end)
+    @test isempty(warnings)
+
+    # Do-block arguments are locals
+    warnings = _collect(@__MODULE__, quote
+        map(1:1) do JSON54872
+            JSON54872.tryparse
+        end
+    end)
+    @test isempty(warnings)
+
+    # Catch variable is local, but try block should still warn
+    warnings = _collect(@__MODULE__, quote
+        try
+            JSON54872.tryparse
+        catch JSON54872
+            JSON54872.tryparse
+        end
+    end)
+    @test length(warnings) == 1
+    @test only(warnings).owner == Base
+    @test only(warnings).name_being_accessed == :tryparse
+
     # false-negative: missing warning
     warnings = _collect(@__MODULE__, quote
         let JSON54872 = JSON54872
@@ -212,4 +271,31 @@ end # JSON54872_public_nested
         JSON54872.tryparse
     end)
     @test !isempty(warnings)
+
+    # Assignment to indexed access should not shadow module name
+    warnings = _collect(@__MODULE__, quote
+        JSON54872[1] = 1
+        JSON54872.tryparse
+    end)
+    @test length(warnings) == 1
+    @test only(warnings).owner == Base
+    @test only(warnings).name_being_accessed == :tryparse
+
+    # Assignment to nested property should not shadow module name
+    warnings = _collect(@__MODULE__, quote
+        JSON54872.Parser.tryparse = 1
+        JSON54872.tryparse
+    end)
+    @test length(warnings) == 1
+    @test only(warnings).owner == Base
+    @test only(warnings).name_being_accessed == :tryparse
+
+    # Dotted assignment should not shadow module name
+    warnings = _collect(@__MODULE__, quote
+        JSON54872 .= 1
+        JSON54872.tryparse
+    end)
+    @test length(warnings) == 1
+    @test only(warnings).owner == Base
+    @test only(warnings).name_being_accessed == :tryparse
 end
